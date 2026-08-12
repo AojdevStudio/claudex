@@ -1,0 +1,23 @@
+[proxy]
+base_url = "https://gateway.example.com"
+api_key_file = "~/.config/claudex/api-key"
+
+[defaults]
+model = "fable"
+
+[models]
+fable = "provider-fable-model"
+opus = "provider-opus-model"
+sonnet = "provider-sonnet-model"
+haiku = "provider-haiku-model"
+
+[custom_model]
+id = "provider-custom-model"
+name = "Custom gateway model"
+description = "Optional custom picker entry routed through the gateway"
+
+[claude]
+subagent_model = "inherit"
+always_enable_effort = true
+max_tool_use_concurrency = 3
+enable_tool_search = false
