@@ -5,7 +5,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::fs::symlink;
 
 use predicates::prelude::*;
-use support::{Fixture, write_config};
+use support::Fixture;
 
 #[test]
 fn unknown_config_fields_are_rejected() {
@@ -123,8 +123,70 @@ fn fixture_config_remains_a_valid_reference() {
         .parent()
         .expect("config parent")
         .join("api-key");
-    write_config(&replacement, &key);
-    assert!(replacement.is_file());
+    let example = include_str!("../config.example.toml")
+        .replace("~/.config/claudex/api-key", &key.to_string_lossy());
+    fs::write(&replacement, example).expect("write example config");
+    fixture
+        .command()
+        .env("CLAUDEX_CONFIG", replacement)
+        .args(["config", "validate"])
+        .assert()
+        .success()
+        .stdout("configuration valid\n");
+}
+
+#[test]
+fn invalid_default_alias_and_unsupported_url_scheme_are_rejected() {
+    let fixture = Fixture::new();
+    let original = fs::read_to_string(&fixture.config).expect("read config");
+    fs::write(
+        &fixture.config,
+        original.replace("model = \"fable\"", "model = \"unknown\""),
+    )
+    .expect("write invalid default");
+    fixture
+        .command()
+        .args(["config", "validate"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("defaults.model"));
+
+    fs::write(
+        &fixture.config,
+        original.replace(
+            "http://127.0.0.1:18317",
+            "file:///private/tmp/not-a-gateway",
+        ),
+    )
+    .expect("write unsupported URL");
+    fixture
+        .command()
+        .args(["config", "validate"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("http or https"));
+}
+
+#[test]
+fn non_utf8_and_owner_unreadable_keys_are_rejected() {
+    let fixture = Fixture::new();
+    let key = fixture.key_path();
+    fs::write(&key, [0xff, b'\n']).expect("write non-UTF-8 key");
+    fixture
+        .command()
+        .args(["config", "validate"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("valid UTF-8"));
+
+    fs::write(&key, "fixture-key\n").expect("restore key");
+    fs::set_permissions(&key, fs::Permissions::from_mode(0o200)).expect("remove read bit");
+    fixture
+        .command()
+        .args(["config", "validate"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("owner-readable"));
 }
 
 #[test]

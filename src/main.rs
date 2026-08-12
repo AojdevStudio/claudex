@@ -42,17 +42,17 @@ fn run() -> Result<(), ClaudexError> {
             );
         }
         Action::Models => {
-            let config = Config::load(Overrides::from_env())?;
+            let config = Config::load(Overrides::from_env()?)?;
             models::print(&config);
         }
         Action::Validate => {
-            let config = Config::load(Overrides::from_env())?;
+            let config = Config::load(Overrides::from_env()?)?;
             let _secret = config.load_secret()?;
             claude::resolve(&config)?;
             println!("configuration valid");
         }
         Action::Doctor { live } => {
-            let config = Config::load(Overrides::from_env())?;
+            let config = Config::load(Overrides::from_env()?)?;
             doctor::run(&config, live)?;
         }
         Action::Launch {
@@ -60,7 +60,7 @@ fn run() -> Result<(), ClaudexError> {
             proxy_model,
             claude_args,
         } => {
-            let config = Config::load(Overrides::from_env())?;
+            let config = Config::load(Overrides::from_env()?)?;
             let model = models::resolve(&config, alias.as_deref(), proxy_model.as_deref())?;
             claude::launch(&config, &model, &claude_args)?;
         }

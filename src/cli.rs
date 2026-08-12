@@ -111,6 +111,15 @@ fn parse_launch(args: Vec<OsString>) -> Result<Invocation, ClaudexError> {
             index += 2;
             continue;
         }
+        if let Some(value) = selector_value(&args[index], "--model=")? {
+            if alias.replace(value).is_some() {
+                return Err(ClaudexError::Arguments(
+                    "--model may be specified only once".into(),
+                ));
+            }
+            index += 1;
+            continue;
+        }
         if args[index] == "--proxy-model" {
             let value = required_value(&args, index, "--proxy-model")?;
             if proxy_model.replace(value).is_some() {
@@ -119,6 +128,15 @@ fn parse_launch(args: Vec<OsString>) -> Result<Invocation, ClaudexError> {
                 ));
             }
             index += 2;
+            continue;
+        }
+        if let Some(value) = selector_value(&args[index], "--proxy-model=")? {
+            if proxy_model.replace(value).is_some() {
+                return Err(ClaudexError::Arguments(
+                    "--proxy-model may be specified only once".into(),
+                ));
+            }
+            index += 1;
             continue;
         }
 
@@ -139,6 +157,22 @@ fn parse_launch(args: Vec<OsString>) -> Result<Invocation, ClaudexError> {
             claude_args,
         },
     })
+}
+
+fn selector_value(value: &OsString, prefix: &str) -> Result<Option<String>, ClaudexError> {
+    let Some(value) = value.to_str() else {
+        return Ok(None);
+    };
+    let Some(value) = value.strip_prefix(prefix) else {
+        return Ok(None);
+    };
+    if value.is_empty() {
+        return Err(ClaudexError::Arguments(format!(
+            "{} requires a non-empty value",
+            prefix.trim_end_matches('=')
+        )));
+    }
+    Ok(Some(value.to_owned()))
 }
 
 fn required_value(args: &[OsString], index: usize, flag: &str) -> Result<String, ClaudexError> {

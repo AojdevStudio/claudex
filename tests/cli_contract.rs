@@ -56,6 +56,34 @@ fn proxy_model_is_the_only_raw_model_path() {
 }
 
 #[test]
+fn equals_form_model_selectors_preserve_alias_enforcement() {
+    let fixture = Fixture::new();
+
+    fixture
+        .command()
+        .arg("--model=opus")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "argv[1]=--model\nargv[2]=provider-opus",
+        ));
+    fixture
+        .command()
+        .arg("--model=provider/raw")
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("unknown model alias"));
+    fixture
+        .command()
+        .arg("--proxy-model=provider/raw")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "argv[1]=--model\nargv[2]=provider/raw",
+        ));
+}
+
+#[test]
 fn model_and_proxy_model_are_mutually_exclusive() {
     let fixture = Fixture::new();
 
@@ -162,13 +190,78 @@ fn launch_removes_ambient_provider_credentials() {
         .success()
         .stdout(predicate::str::contains("ANTHROPIC_API_KEY=<UNSET>"))
         .stdout(predicate::str::contains("CLAUDE_CODE_OAUTH_TOKEN=<UNSET>"))
+        .stdout(predicate::str::contains(
+            "CLAUDE_CODE_OAUTH_REFRESH_TOKEN=<UNSET>",
+        ))
+        .stdout(predicate::str::contains("CLAUDE_CODE_OAUTH_SCOPES=<UNSET>"))
         .stdout(predicate::str::contains("CLAUDE_CODE_USE_BEDROCK=<UNSET>"))
         .stdout(predicate::str::contains("CLAUDE_CODE_USE_VERTEX=<UNSET>"))
         .stdout(predicate::str::contains("CLAUDE_CODE_USE_FOUNDRY=<UNSET>"))
+        .stdout(predicate::str::contains("CLAUDE_CODE_USE_MANTLE=<UNSET>"))
         .stdout(predicate::str::contains(
             "CLAUDE_CODE_USE_ANTHROPIC_AWS=<UNSET>",
         ))
         .stdout(predicate::str::contains("must-be-removed").not());
+}
+
+#[test]
+fn absent_custom_picker_removes_ambient_picker_values() {
+    let fixture = Fixture::new();
+    let source = std::fs::read_to_string(&fixture.config).expect("read fixture config");
+    let start = source.find("[custom_model]").expect("custom section");
+    let end = source.find("[claude]").expect("Claude section");
+    let without_custom = format!("{}{}", &source[..start], &source[end..]);
+    std::fs::write(&fixture.config, without_custom).expect("remove custom picker config");
+
+    fixture
+        .command()
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "ANTHROPIC_CUSTOM_MODEL_OPTION=<UNSET>",
+        ))
+        .stdout(predicate::str::contains(
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME=<UNSET>",
+        ))
+        .stdout(predicate::str::contains(
+            "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION=<UNSET>",
+        ))
+        .stdout(predicate::str::contains("must-be-replaced").not());
+}
+
+#[test]
+fn exact_child_environment_comes_from_configuration() {
+    let fixture = Fixture::new();
+
+    fixture
+        .command()
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "ANTHROPIC_DEFAULT_FABLE_MODEL=provider-fable",
+        ))
+        .stdout(predicate::str::contains(
+            "ANTHROPIC_DEFAULT_OPUS_MODEL=provider-opus",
+        ))
+        .stdout(predicate::str::contains(
+            "ANTHROPIC_DEFAULT_SONNET_MODEL=provider-sonnet",
+        ))
+        .stdout(predicate::str::contains(
+            "ANTHROPIC_DEFAULT_HAIKU_MODEL=provider-haiku",
+        ))
+        .stdout(predicate::str::contains(
+            "ANTHROPIC_CUSTOM_MODEL_OPTION=provider-custom",
+        ))
+        .stdout(predicate::str::contains(
+            "CLAUDE_CODE_SUBAGENT_MODEL=inherit",
+        ))
+        .stdout(predicate::str::contains(
+            "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT=1",
+        ))
+        .stdout(predicate::str::contains(
+            "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY=3",
+        ))
+        .stdout(predicate::str::contains("ENABLE_TOOL_SEARCH=false"));
 }
 
 #[test]

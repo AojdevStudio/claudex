@@ -5,16 +5,15 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
-permissions:
-  contents: write
-  id-token: write
-  attestations: write
-
 jobs:
-  release:
+  build:
     runs-on: macos-14
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@1.88.0
         with:
           targets: aarch64-apple-darwin
@@ -32,21 +31,38 @@ jobs:
           cp "target/aarch64-apple-darwin/release/claudex" "dist/${artifact}/claudex"
           cp README.md LICENSE SECURITY.md "dist/${artifact}/"
           tar -C dist -cJf "dist/${artifact}.tar.xz" "${artifact}"
-          shasum -a 256 "dist/${artifact}.tar.xz" > "dist/${artifact}.tar.xz.sha256"
-          echo "artifact=dist/${artifact}.tar.xz" >> "$GITHUB_ENV"
-          echo "checksum=dist/${artifact}.tar.xz.sha256" >> "$GITHUB_ENV"
+          (cd dist && shasum -a 256 "${artifact}.tar.xz" > "${artifact}.tar.xz.sha256")
+      - uses: actions/upload-artifact@v7
+        with:
+          name: claudex-release-assets
+          path: |
+            dist/*.tar.xz
+            dist/*.tar.xz.sha256
+          if-no-files-found: error
+
+  attest-and-release:
+    needs: build
+    runs-on: macos-14
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: claudex-release-assets
+          path: dist
       - name: Attest release archive
         uses: actions/attest-build-provenance@v4
         with:
-          subject-path: ${{ env.artifact }}
+          subject-path: dist/*.tar.xz
+      - name: Verify release attestation
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh attestation verify dist/*.tar.xz --repo "$GITHUB_REPOSITORY"
       - name: Publish release
         if: startsWith(github.ref, 'refs/tags/')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" "$artifact" "$checksum" --verify-tag --generate-notes
-      - uses: actions/upload-artifact@v7
-        with:
-          name: claudex-aarch64-apple-darwin
-          path: |
-            ${{ env.artifact }}
-            ${{ env.checksum }}
+        run: gh release create "${GITHUB_REF_NAME}" dist/*.tar.xz dist/*.tar.xz.sha256 --verify-tag --generate-notes

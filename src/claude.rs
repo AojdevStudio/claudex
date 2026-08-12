@@ -5,6 +5,9 @@ use std::os::unix::fs::PermissionsExt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::process::Stdio;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use crate::config::Config;
 use crate::error::ClaudexError;
@@ -20,6 +23,9 @@ const REMOVED_ENVIRONMENT: &[&str] = &[
     "CLAUDE_CODE_USE_FOUNDRY",
     "CLAUDE_CODE_USE_MANTLE",
     "CLAUDE_CODE_USE_ANTHROPIC_AWS",
+    "ANTHROPIC_CUSTOM_MODEL_OPTION",
+    "ANTHROPIC_CUSTOM_MODEL_OPTION_NAME",
+    "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION",
 ];
 
 pub fn launch(config: &Config, model: &str, args: &[OsString]) -> Result<(), ClaudexError> {
@@ -34,20 +40,60 @@ pub fn run_live(
     config: &Config,
     model: &str,
     args: &[OsString],
+    timeout: Duration,
 ) -> Result<std::process::Output, ClaudexError> {
     let secret = config.load_secret()?;
     let executable = resolve(config)?;
-    build_command(config, &secret, &executable, model, args)
-        .output()
-        .map_err(ClaudexError::Launch)
+    let mut command = build_command(config, &secret, &executable, model, args);
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command
+        .spawn()
+        .map_err(|error| ClaudexError::DoctorLive(format!("cannot launch Claude Code: {error}")))?;
+    let started = Instant::now();
+    loop {
+        if child
+            .try_wait()
+            .map_err(|error| {
+                ClaudexError::DoctorLive(format!("cannot wait for Claude Code: {error}"))
+            })?
+            .is_some()
+        {
+            return child.wait_with_output().map_err(|error| {
+                ClaudexError::DoctorLive(format!("cannot collect Claude Code output: {error}"))
+            });
+        }
+        if started.elapsed() >= timeout {
+            child.kill().map_err(|error| {
+                ClaudexError::DoctorLive(format!(
+                    "Claude Code timed out and could not be stopped: {error}"
+                ))
+            })?;
+            child.wait().map_err(|error| {
+                ClaudexError::DoctorLive(format!(
+                    "Claude Code timed out and could not be reaped: {error}"
+                ))
+            })?;
+            return Err(ClaudexError::DoctorLive(format!(
+                "Claude Code timed out after {} ms",
+                timeout.as_millis()
+            )));
+        }
+        thread::sleep(Duration::from_millis(10));
+    }
 }
 
 pub fn resolve(config: &Config) -> Result<PathBuf, ClaudexError> {
-    let current = env::current_exe()
-        .ok()
-        .and_then(|path| path.canonicalize().ok());
+    let current_path = env::current_exe().map_err(|error| {
+        ClaudexError::ClaudeNotFound(format!("cannot identify the claudex executable: {error}"))
+    })?;
+    let current = current_path.canonicalize().map_err(|error| {
+        ClaudexError::ClaudeNotFound(format!(
+            "cannot resolve {}: {error}",
+            current_path.display()
+        ))
+    })?;
     if let Some(path) = config.claude_path_override() {
-        return validate_candidate(path, current.as_deref());
+        return validate_candidate(path, Some(&current));
     }
 
     let path = env::var_os("PATH").ok_or_else(|| {
@@ -55,7 +101,7 @@ pub fn resolve(config: &Config) -> Result<PathBuf, ClaudexError> {
     })?;
     for directory in env::split_paths(&path) {
         let candidate = directory.join("claude");
-        if let Ok(valid) = validate_candidate(candidate, current.as_deref()) {
+        if let Ok(valid) = validate_candidate(candidate, Some(&current)) {
             return Ok(valid);
         }
     }

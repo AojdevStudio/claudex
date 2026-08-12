@@ -1,7 +1,11 @@
+use std::ffi::CString;
 use std::fmt;
-use std::fs;
+use std::fs::File;
+use std::io::{self, Read};
+use std::os::fd::{AsRawFd, FromRawFd};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{MetadataExt, PermissionsExt};
-use std::path::{Component, Path, PathBuf};
+use std::path::{Component, Path};
 
 use crate::error::ClaudexError;
 
@@ -9,8 +13,8 @@ pub struct Secret(String);
 
 impl Secret {
     pub fn load(path: &Path) -> Result<Self, ClaudexError> {
-        reject_symlinks(path)?;
-        let metadata = fs::metadata(path).map_err(|error| {
+        let mut file = open_without_symlinks(path)?;
+        let metadata = file.metadata().map_err(|error| {
             ClaudexError::Secret(format!("cannot inspect {}: {error}", path.display()))
         })?;
         let mode = metadata.permissions().mode() & 0o777;
@@ -22,7 +26,8 @@ impl Secret {
         )
         .map_err(|message| ClaudexError::Secret(format!("{} {message}", path.display())))?;
 
-        let mut bytes = fs::read(path).map_err(|error| {
+        let mut bytes = Vec::new();
+        file.read_to_end(&mut bytes).map_err(|error| {
             ClaudexError::Secret(format!("cannot read {}: {error}", path.display()))
         })?;
         if bytes.ends_with(b"\r\n") {
@@ -86,22 +91,66 @@ impl fmt::Display for Secret {
     }
 }
 
-fn reject_symlinks(path: &Path) -> Result<(), ClaudexError> {
-    let mut current = PathBuf::new();
-    for component in path.components() {
-        match component {
-            Component::Prefix(_) | Component::RootDir => current.push(component.as_os_str()),
-            Component::CurDir => continue,
-            Component::ParentDir | Component::Normal(_) => current.push(component.as_os_str()),
-        }
-        if fs::symlink_metadata(&current).is_ok_and(|metadata| metadata.file_type().is_symlink()) {
+fn open_without_symlinks(path: &Path) -> Result<File, ClaudexError> {
+    let absolute = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()
+            .map_err(|error| {
+                ClaudexError::Secret(format!("cannot resolve current directory: {error}"))
+            })?
+            .join(path)
+    };
+    let parts: Vec<_> = absolute
+        .components()
+        .filter_map(|component| match component {
+            Component::Normal(value) => Some(value.to_owned()),
+            Component::ParentDir => Some("..".into()),
+            Component::Prefix(_) | Component::RootDir | Component::CurDir => None,
+        })
+        .collect();
+    if parts.is_empty() {
+        return Err(ClaudexError::Secret(format!(
+            "{} is not a regular file",
+            path.display()
+        )));
+    }
+
+    let mut directory = File::open("/").map_err(|error| {
+        ClaudexError::Secret(format!("cannot safely open {}: {error}", path.display()))
+    })?;
+    for (index, part) in parts.iter().enumerate() {
+        let name = CString::new(part.as_bytes())
+            .map_err(|_| ClaudexError::Secret(format!("{} contains a NUL byte", path.display())))?;
+        let is_final = index + 1 == parts.len();
+        let flags = libc::O_RDONLY
+            | libc::O_CLOEXEC
+            | libc::O_NOFOLLOW
+            | if is_final { 0 } else { libc::O_DIRECTORY };
+        // SAFETY: `directory` owns a live directory fd and `name` is a NUL-terminated C string.
+        let fd = unsafe { libc::openat(directory.as_raw_fd(), name.as_ptr(), flags) };
+        if fd < 0 {
+            let error = io::Error::last_os_error();
+            let detail = match error.raw_os_error() {
+                Some(libc::ELOOP | libc::ENOTDIR) => {
+                    "contains a symbolic link or non-directory path component".to_owned()
+                }
+                Some(libc::EACCES) if is_final => "is not owner-readable".to_owned(),
+                _ => error.to_string(),
+            };
             return Err(ClaudexError::Secret(format!(
-                "{} contains a symbolic link",
+                "cannot safely open {}: {detail}",
                 path.display()
             )));
         }
+        // SAFETY: `openat` returned this owned fd and it has not been wrapped or closed elsewhere.
+        let opened = unsafe { File::from_raw_fd(fd) };
+        if is_final {
+            return Ok(opened);
+        }
+        directory = opened;
     }
-    Ok(())
+    unreachable!("non-empty path has a final component")
 }
 
 #[cfg(test)]

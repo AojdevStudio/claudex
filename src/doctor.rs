@@ -52,6 +52,7 @@ pub fn run(config: &Config, live: bool) -> Result<(), ClaudexError> {
                 OsString::from("--no-session-persistence"),
                 OsString::from(LIVE_PROMPT),
             ],
+            timeout,
         )?;
         if !output.status.success() {
             return Err(ClaudexError::DoctorLive(format!(

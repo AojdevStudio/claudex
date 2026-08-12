@@ -44,6 +44,7 @@ fn doctor_live_launches_claude_code_in_print_mode() {
     let fixture = Fixture::new();
     fixture.set_fake_claude(
         r#"#!/bin/zsh
+set -e
 [[ "$1" == "--model" ]]
 [[ "$3" == "-p" ]]
 [[ "$4" == "--no-session-persistence" ]]
@@ -114,5 +115,22 @@ fn doctor_live_classifies_wrong_response() {
         .assert()
         .code(4)
         .stderr(predicate::str::contains("expected CLAUDEX_DOCTOR_OK"));
+    server.join().expect("join test server");
+}
+
+#[test]
+fn doctor_live_times_out_and_classifies_launch_failures() {
+    let fixture = Fixture::new();
+    fixture.set_fake_claude("#!/bin/zsh\nsleep 1\nprint -r -- CLAUDEX_DOCTOR_OK\n");
+    let (base_url, server) = server_with_status(200);
+    fixture.set_base_url(&base_url);
+
+    fixture
+        .command()
+        .env("CLAUDEX_DOCTOR_TIMEOUT_MS", "50")
+        .args(["doctor", "--live"])
+        .assert()
+        .code(4)
+        .stderr(predicate::str::contains("timed out"));
     server.join().expect("join test server");
 }

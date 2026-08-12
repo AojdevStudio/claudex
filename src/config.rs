@@ -83,13 +83,23 @@ pub struct Overrides {
 }
 
 impl Overrides {
-    pub fn from_env() -> Self {
-        Self {
+    pub fn from_env() -> Result<Self, ClaudexError> {
+        Ok(Self {
             config_path: env::var_os("CLAUDEX_CONFIG").map(PathBuf::from),
-            base_url: env::var("CLAUDEX_BASE_URL").ok(),
+            base_url: string_override("CLAUDEX_BASE_URL")?,
             api_key_file: env::var_os("CLAUDEX_API_KEY_FILE").map(PathBuf::from),
-            default_model: env::var("CLAUDEX_DEFAULT_MODEL").ok(),
+            default_model: string_override("CLAUDEX_DEFAULT_MODEL")?,
             claude_path: env::var_os("CLAUDEX_CLAUDE_PATH").map(PathBuf::from),
+        })
+    }
+}
+
+fn string_override(name: &str) -> Result<Option<String>, ClaudexError> {
+    match env::var(name) {
+        Ok(value) => Ok(Some(value)),
+        Err(env::VarError::NotPresent) => Ok(None),
+        Err(env::VarError::NotUnicode(_)) => {
+            Err(ClaudexError::Config(format!("{name} must be valid UTF-8")))
         }
     }
 }
@@ -129,8 +139,21 @@ impl Config {
                 "proxy.base_url cannot be empty".into(),
             ));
         }
-        reqwest::Url::parse(&self.proxy.base_url)
+        let base_url = reqwest::Url::parse(&self.proxy.base_url)
             .map_err(|error| ClaudexError::Config(format!("proxy.base_url is invalid: {error}")))?;
+        if !matches!(base_url.scheme(), "http" | "https") {
+            return Err(ClaudexError::Config(
+                "proxy.base_url must use http or https".into(),
+            ));
+        }
+        if base_url.host_str().is_none()
+            || base_url.query().is_some()
+            || base_url.fragment().is_some()
+        {
+            return Err(ClaudexError::Config(
+                "proxy.base_url must have a host and no query or fragment".into(),
+            ));
+        }
         if self.claude.max_tool_use_concurrency == 0 {
             return Err(ClaudexError::Config(
                 "claude.max_tool_use_concurrency must be at least 1".into(),
@@ -142,6 +165,11 @@ impl Config {
                     "models.{name} cannot be empty"
                 )));
             }
+        }
+        if self.models.get(&self.defaults.model).is_none() {
+            return Err(ClaudexError::Config(
+                "defaults.model must be one of: fable, haiku, opus, sonnet".into(),
+            ));
         }
         Ok(())
     }
