@@ -14,7 +14,7 @@ jobs:
   release:
     runs-on: macos-14
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@1.88.0
         with:
           targets: aarch64-apple-darwin
@@ -36,7 +36,7 @@ jobs:
           echo "artifact=dist/${artifact}.tar.xz" >> "$GITHUB_ENV"
           echo "checksum=dist/${artifact}.tar.xz.sha256" >> "$GITHUB_ENV"
       - name: Attest release archive
-        uses: actions/attest-build-provenance@v3
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: ${{ env.artifact }}
       - name: Publish release
@@ -44,7 +44,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release create "${GITHUB_REF_NAME}" "$artifact" "$checksum" --verify-tag --generate-notes
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: claudex-aarch64-apple-darwin
           path: |
