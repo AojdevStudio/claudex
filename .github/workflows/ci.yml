@@ -10,7 +10,18 @@ permissions:
 
 jobs:
   test:
-    runs-on: macos-14
+    name: Test ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            target: aarch64-apple-darwin
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
     steps:
       - uses: actions/checkout@v7
         with:
@@ -19,11 +30,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.88.0
         with:
           components: clippy, rustfmt
-          targets: aarch64-apple-darwin
-      - run: cargo fmt --check
-      - run: cargo clippy --all-targets --all-features -- -D warnings
-      - run: cargo test --all-targets
-      - run: cargo build --release --target aarch64-apple-darwin
+          targets: ${{ matrix.target }}
+      - name: Install Linux build tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes musl-tools
+      - if: runner.os == 'macOS'
+        run: cargo fmt --check
+      - run: cargo clippy --all-targets --all-features --target "${{ matrix.target }}" -- -D warnings
+      - run: cargo test --all-targets --target "${{ matrix.target }}"
+      - run: cargo build --locked --release --target "${{ matrix.target }}"
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ runner.os == 'macOS' && '11.0' || '' }}
       - name: Check committed whitespace
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}

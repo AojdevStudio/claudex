@@ -24,7 +24,10 @@ fn server_with_status(status: u16) -> (String, thread::JoinHandle<()>) {
 fn doctor_checks_models_without_launching_inference() {
     let fixture = Fixture::new();
     let marker = fixture.marker_path();
-    fixture.set_fake_claude(&format!("#!/bin/zsh\nprint ran > {}\n", marker.display()));
+    fixture.set_fake_claude(&format!(
+        "#!/bin/sh\nprintf '%s\\n' ran > {}\n",
+        marker.display()
+    ));
     let (base_url, server) = server_with_status(200);
     fixture.set_base_url(&base_url);
 
@@ -43,13 +46,13 @@ fn doctor_checks_models_without_launching_inference() {
 fn doctor_live_launches_claude_code_in_print_mode() {
     let fixture = Fixture::new();
     fixture.set_fake_claude(
-        r#"#!/bin/zsh
+        r#"#!/bin/sh
 set -e
-[[ "$1" == "--model" ]]
-[[ "$3" == "-p" ]]
-[[ "$4" == "--no-session-persistence" ]]
-[[ "$5" == "Return exactly CLAUDEX_DOCTOR_OK" ]]
-print -r -- "CLAUDEX_DOCTOR_OK"
+[ "$1" = "--model" ]
+[ "$3" = "-p" ]
+[ "$4" = "--no-session-persistence" ]
+[ "$5" = "Return exactly CLAUDEX_DOCTOR_OK" ]
+printf '%s\n' "CLAUDEX_DOCTOR_OK"
 "#,
     );
     let (base_url, server) = server_with_status(200);
@@ -105,7 +108,7 @@ fn doctor_classifies_timeout() {
 #[test]
 fn doctor_live_classifies_wrong_response() {
     let fixture = Fixture::new();
-    fixture.set_fake_claude("#!/bin/zsh\nprint -r -- WRONG\n");
+    fixture.set_fake_claude("#!/bin/sh\nprintf '%s\\n' WRONG\n");
     let (base_url, server) = server_with_status(200);
     fixture.set_base_url(&base_url);
 
@@ -121,7 +124,7 @@ fn doctor_live_classifies_wrong_response() {
 #[test]
 fn doctor_live_times_out_and_classifies_launch_failures() {
     let fixture = Fixture::new();
-    fixture.set_fake_claude("#!/bin/zsh\nsleep 1\nprint -r -- CLAUDEX_DOCTOR_OK\n");
+    fixture.set_fake_claude("#!/bin/sh\nsleep 1\nprintf '%s\\n' CLAUDEX_DOCTOR_OK\n");
     let (base_url, server) = server_with_status(200);
     fixture.set_base_url(&base_url);
 
@@ -150,7 +153,7 @@ fn doctor_live_classifies_spawn_and_nonzero_failures() {
     server.join().expect("join test server");
 
     let fixture = Fixture::new();
-    fixture.set_fake_claude("#!/bin/zsh\nexit 9\n");
+    fixture.set_fake_claude("#!/bin/sh\nexit 9\n");
     let (base_url, server) = server_with_status(200);
     fixture.set_base_url(&base_url);
     fixture

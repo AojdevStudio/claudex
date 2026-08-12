@@ -6,11 +6,14 @@ It does not implement inference, OAuth, provider routing, plugins, failover, or 
 
 ## Install
 
+Homebrew provides the same install and upgrade workflow on macOS, Linux, and WSL 2:
+
 ```bash
 brew install AojdevStudio/tap/claudex
+brew upgrade claudex
 ```
 
-The formula installs the executable and zsh completions. Native `claude` remains a separate command and keeps its normal authentication.
+The release pipeline produces prebuilt archives for Apple Silicon macOS, x86-64 Linux, and ARM64 Linux. The formula installs the executable and zsh completions. Native `claude` remains a separate command and keeps its normal authentication.
 
 ## Configure
 
@@ -76,4 +79,4 @@ MACOSX_DEPLOYMENT_TARGET=11.0 cargo build --release --target aarch64-apple-darwi
 git diff --check
 ```
 
-The release archive targets Apple Silicon Macs running macOS 11.0 or later. See [SECURITY.md](SECURITY.md) for the credential boundary and [docs/rollback.md](docs/rollback.md) for cutover recovery.
+Release archives target Apple Silicon Macs running macOS 11.0 or later, x86-64 Linux, and ARM64 Linux. Linux releases use statically linked MUSL targets for portability across distributions. See [SECURITY.md](SECURITY.md) for the credential boundary and [docs/rollback.md](docs/rollback.md) for cutover recovery.

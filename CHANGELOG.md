@@ -4,9 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+
+- add Linux distribution targets
+
 ### Fixed
 
-- publish without repository checkout
+- publish without repository checkout (#5)
 
 ## [0.1.0] - 2026-08-12
 

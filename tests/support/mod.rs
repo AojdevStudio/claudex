@@ -15,9 +15,12 @@ pub struct Fixture {
 
 impl Fixture {
     pub fn new() -> Self {
+        let temp_root = std::env::temp_dir()
+            .canonicalize()
+            .expect("resolve platform temp directory");
         let root = tempfile::Builder::new()
             .prefix("claudex-test-")
-            .tempdir_in("/private/tmp")
+            .tempdir_in(temp_root)
             .expect("create fixture directory");
         let key = root.path().join("api-key");
         fs::write(&key, "fixture-key\n").expect("write fixture key");
@@ -40,7 +43,7 @@ for name in ANTHROPIC_BASE_URL ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN CLAUDE_
     printf '%s=<UNSET>\n' "$name"
   fi
 done
-if [[ "$(printenv ANTHROPIC_AUTH_TOKEN)" == "fixture-key" ]]; then
+if [ "$(printenv ANTHROPIC_AUTH_TOKEN)" = "fixture-key" ]; then
   printf 'ANTHROPIC_AUTH_TOKEN=<EXPECTED>\n'
 else
   printf 'ANTHROPIC_AUTH_TOKEN=<UNEXPECTED>\n'
