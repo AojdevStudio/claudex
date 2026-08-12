@@ -20,7 +20,7 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ inputs.tag || github.ref }}
-      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: dtolnay/rust-toolchain@1.100.0
         with:
           targets: aarch64-apple-darwin
       - name: Verify tag matches Cargo version
