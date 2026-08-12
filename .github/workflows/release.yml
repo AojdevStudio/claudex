@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.88.0
+        with:
+          targets: aarch64-apple-darwin
+      - name: Verify tag matches Cargo version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+          test "${GITHUB_REF_NAME}" = "v${version}"
+      - name: Build archive and checksum
+        run: |
+          version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
+          artifact="claudex-v${version}-aarch64-apple-darwin"
+          cargo build --locked --release --target aarch64-apple-darwin
+          mkdir -p "dist/${artifact}"
+          cp "target/aarch64-apple-darwin/release/claudex" "dist/${artifact}/claudex"
+          cp README.md LICENSE SECURITY.md "dist/${artifact}/"
+          tar -C dist -cJf "dist/${artifact}.tar.xz" "${artifact}"
+          shasum -a 256 "dist/${artifact}.tar.xz" > "dist/${artifact}.tar.xz.sha256"
+          echo "artifact=dist/${artifact}.tar.xz" >> "$GITHUB_ENV"
+          echo "checksum=dist/${artifact}.tar.xz.sha256" >> "$GITHUB_ENV"
+      - name: Attest release archive
+        uses: actions/attest-build-provenance@v3
+        with:
+          subject-path: ${{ env.artifact }}
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" "$artifact" "$checksum" --verify-tag --generate-notes
+      - uses: actions/upload-artifact@v4
+        with:
+          name: claudex-aarch64-apple-darwin
+          path: |
+            ${{ env.artifact }}
+            ${{ env.checksum }}
