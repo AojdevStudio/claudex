@@ -40,9 +40,12 @@ for name in ANTHROPIC_BASE_URL ANTHROPIC_API_KEY CLAUDE_CODE_OAUTH_TOKEN CLAUDE_
     printf '%s=<UNSET>\n' "$name"
   fi
 done
-if printenv ANTHROPIC_AUTH_TOKEN >/dev/null; then
-  printf 'ANTHROPIC_AUTH_TOKEN=<SET>\n'
+if [[ "$(printenv ANTHROPIC_AUTH_TOKEN)" == "fixture-key" ]]; then
+  printf 'ANTHROPIC_AUTH_TOKEN=<EXPECTED>\n'
+else
+  printf 'ANTHROPIC_AUTH_TOKEN=<UNEXPECTED>\n'
 fi
+printf 'CLAUDEX_ORDINARY_ENV=%s\n' "${CLAUDEX_ORDINARY_ENV:-<UNSET>}"
 "#,
         )
         .expect("write fake Claude");
@@ -85,6 +88,7 @@ fi
             .env("CLAUDEX_CONFIG", &self.config)
             .env("CLAUDEX_CLAUDE_PATH", &self.fake_claude)
             .env("ANTHROPIC_API_KEY", "must-be-removed")
+            .env("ANTHROPIC_AUTH_TOKEN", "must-be-replaced")
             .env("CLAUDE_CODE_OAUTH_TOKEN", "must-be-removed")
             .env("CLAUDE_CODE_OAUTH_REFRESH_TOKEN", "must-be-removed")
             .env("CLAUDE_CODE_OAUTH_SCOPES", "must-be-removed")
@@ -98,7 +102,8 @@ fi
             .env(
                 "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION",
                 "must-be-replaced",
-            );
+            )
+            .env("CLAUDEX_ORDINARY_ENV", "inherited");
         command
     }
 }

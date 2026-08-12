@@ -134,3 +134,30 @@ fn doctor_live_times_out_and_classifies_launch_failures() {
         .stderr(predicate::str::contains("timed out"));
     server.join().expect("join test server");
 }
+
+#[test]
+fn doctor_live_classifies_spawn_and_nonzero_failures() {
+    let fixture = Fixture::new();
+    fixture.set_fake_claude("#!/does/not/exist\n");
+    let (base_url, server) = server_with_status(200);
+    fixture.set_base_url(&base_url);
+    fixture
+        .command()
+        .args(["doctor", "--live"])
+        .assert()
+        .code(4)
+        .stderr(predicate::str::contains("cannot launch Claude Code"));
+    server.join().expect("join test server");
+
+    let fixture = Fixture::new();
+    fixture.set_fake_claude("#!/bin/zsh\nexit 9\n");
+    let (base_url, server) = server_with_status(200);
+    fixture.set_base_url(&base_url);
+    fixture
+        .command()
+        .args(["doctor", "--live"])
+        .assert()
+        .code(4)
+        .stderr(predicate::str::contains("exited with"));
+    server.join().expect("join test server");
+}

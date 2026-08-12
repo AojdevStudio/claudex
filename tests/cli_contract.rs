@@ -23,7 +23,9 @@ fn no_arguments_launches_the_configured_default_model() {
         .stdout(predicate::str::contains(
             "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION=Custom model routed through the test gateway",
         ))
-        .stdout(predicate::str::contains("ANTHROPIC_AUTH_TOKEN=<SET>"));
+        .stdout(predicate::str::contains(
+            "ANTHROPIC_AUTH_TOKEN=<EXPECTED>",
+        ));
 }
 
 #[test]
@@ -262,6 +264,20 @@ fn exact_child_environment_comes_from_configuration() {
             "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY=3",
         ))
         .stdout(predicate::str::contains("ENABLE_TOOL_SEARCH=false"));
+}
+
+#[test]
+fn ordinary_environment_is_inherited_and_auth_token_is_replaced() {
+    let fixture = Fixture::new();
+
+    fixture
+        .command()
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("CLAUDEX_ORDINARY_ENV=inherited"))
+        .stdout(predicate::str::contains("ANTHROPIC_AUTH_TOKEN=<EXPECTED>"))
+        .stdout(predicate::str::contains("must-be-replaced").not())
+        .stderr(predicate::str::contains("must-be-replaced").not());
 }
 
 #[test]

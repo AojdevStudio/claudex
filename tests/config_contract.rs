@@ -3,6 +3,7 @@ mod support;
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::os::unix::fs::symlink;
+use std::process::Command;
 
 use predicates::prelude::*;
 use support::Fixture;
@@ -283,6 +284,30 @@ fn key_path_must_be_a_regular_file() {
     fixture
         .command()
         .env("CLAUDEX_API_KEY_FILE", directory)
+        .args(["config", "validate"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains("not a regular file"));
+}
+
+#[test]
+fn fifo_key_path_is_rejected_without_blocking() {
+    let fixture = Fixture::new();
+    let fifo = fixture
+        .config
+        .parent()
+        .expect("config parent")
+        .join("api-key-fifo");
+    let status = Command::new("mkfifo")
+        .arg(&fifo)
+        .status()
+        .expect("create FIFO");
+    assert!(status.success(), "mkfifo must succeed");
+    fs::set_permissions(&fifo, fs::Permissions::from_mode(0o600)).expect("secure FIFO");
+
+    fixture
+        .command()
+        .env("CLAUDEX_API_KEY_FILE", fifo)
         .args(["config", "validate"])
         .assert()
         .code(2)

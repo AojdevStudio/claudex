@@ -126,7 +126,11 @@ fn open_without_symlinks(path: &Path) -> Result<File, ClaudexError> {
         let flags = libc::O_RDONLY
             | libc::O_CLOEXEC
             | libc::O_NOFOLLOW
-            | if is_final { 0 } else { libc::O_DIRECTORY };
+            | if is_final {
+                libc::O_NONBLOCK
+            } else {
+                libc::O_DIRECTORY
+            };
         // SAFETY: `directory` owns a live directory fd and `name` is a NUL-terminated C string.
         let fd = unsafe { libc::openat(directory.as_raw_fd(), name.as_ptr(), flags) };
         if fd < 0 {
