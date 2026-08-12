@@ -12,3 +12,7 @@ All notable changes to this project will be documented in this file.
 
 - Initial commit
 
+### Fixed
+
+- close review security gaps
+
