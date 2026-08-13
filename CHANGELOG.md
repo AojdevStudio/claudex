@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- preserve the protected test gate
 - publish without repository checkout (#5)
 
 ## [0.1.0] - 2026-08-12

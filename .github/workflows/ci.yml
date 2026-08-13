@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  platform-tests:
     name: Test ${{ matrix.target }}
     runs-on: ${{ matrix.runner }}
     strategy:
@@ -50,3 +50,14 @@ jobs:
           else
             git show --check --format= HEAD
           fi
+
+  test:
+    name: test
+    if: ${{ always() }}
+    needs: platform-tests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every platform test
+        env:
+          PLATFORM_RESULT: ${{ needs.platform-tests.result }}
+        run: test "$PLATFORM_RESULT" = success
