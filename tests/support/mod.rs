@@ -3,6 +3,7 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use std::process::Command as ProcessCommand;
 
 use assert_cmd::Command;
 use tempfile::TempDir;
@@ -77,6 +78,28 @@ printf 'CLAUDEX_ORDINARY_ENV=%s\n' "${CLAUDEX_ORDINARY_ENV:-<UNSET>}"
         fs::write(&self.fake_claude, source).expect("replace fake Claude");
         fs::set_permissions(&self.fake_claude, fs::Permissions::from_mode(0o700))
             .expect("make replacement executable");
+    }
+
+    pub fn native_fake_claude(&self) -> PathBuf {
+        let source = self.root.path().join("argv0.rs");
+        let executable = self.root.path().join("2.1.229");
+        fs::write(
+            &source,
+            r#"fn main() {
+    let argv0 = std::env::args_os().next().expect("argv0");
+    println!("argv0={}", argv0.to_string_lossy());
+}
+"#,
+        )
+        .expect("write native fake Claude source");
+        let status = ProcessCommand::new("rustc")
+            .args(["--edition=2024", "-o"])
+            .arg(&executable)
+            .arg(&source)
+            .status()
+            .expect("compile native fake Claude");
+        assert!(status.success(), "compile native fake Claude");
+        executable
     }
 
     pub fn set_base_url(&self, base_url: &str) {

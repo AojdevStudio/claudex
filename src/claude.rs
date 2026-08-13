@@ -139,6 +139,7 @@ fn build_command(
     args: &[OsString],
 ) -> Command {
     let mut command = Command::new(executable);
+    command.arg0("claude");
     command.arg("--model").arg(model).args(args);
     for name in REMOVED_ENVIRONMENT {
         command.env_remove(name);
