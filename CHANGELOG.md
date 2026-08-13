@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+
+- identify Claude child processes
+
 ## [0.2.0] - 2026-08-12
 
 ### Changed

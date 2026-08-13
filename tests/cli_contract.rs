@@ -29,6 +29,19 @@ fn no_arguments_launches_the_configured_default_model() {
 }
 
 #[test]
+fn launched_claude_identifies_itself_as_claude() {
+    let fixture = Fixture::new();
+    let versioned_claude = fixture.native_fake_claude();
+
+    fixture
+        .command()
+        .env("CLAUDEX_CLAUDE_PATH", versioned_claude)
+        .assert()
+        .success()
+        .stdout("argv0=claude\n");
+}
+
+#[test]
 fn model_accepts_aliases_and_passes_one_resolved_model() {
     let fixture = Fixture::new();
 
