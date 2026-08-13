@@ -139,7 +139,10 @@ fn help_and_version_are_claudex_output() {
         .arg("--version")
         .assert()
         .success()
-        .stdout(predicate::str::contains("claudex 0.1.0"));
+        .stdout(predicate::str::contains(format!(
+            "claudex {}",
+            env!("CARGO_PKG_VERSION")
+        )));
 }
 
 #[test]
