@@ -11,6 +11,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    ignore:
+      # These action tags select Rust itself and must match rust-toolchain.toml.
+      - dependency-name: dtolnay/rust-toolchain
     groups:
       actions-minor-patch:
         update-types: [minor, patch]

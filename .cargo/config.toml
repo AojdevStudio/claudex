@@ -1,2 +1,8 @@
 [env]
 MACOSX_DEPLOYMENT_TARGET = "11.0"
+
+[target.x86_64-unknown-linux-musl]
+linker = "musl-gcc"
+
+[target.aarch64-unknown-linux-musl]
+linker = "musl-gcc"

@@ -4,37 +4,65 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing signed release tag to publish
+        required: true
+        type: string
 
 jobs:
   build:
-    runs-on: macos-14
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+            target: aarch64-apple-darwin
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+          ref: ${{ inputs.tag || github.ref }}
       - uses: dtolnay/rust-toolchain@1.88.0
         with:
-          targets: aarch64-apple-darwin
+          targets: ${{ matrix.target }}
+      - name: Install Linux build tools
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install --yes musl-tools xz-utils
       - name: Verify tag matches Cargo version
-        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
-          test "${GITHUB_REF_NAME}" = "v${version}"
+          test "${RELEASE_TAG}" = "v${version}"
       - name: Build archive and checksum
+        env:
+          MACOSX_DEPLOYMENT_TARGET: ${{ runner.os == 'macOS' && '11.0' || '' }}
+          TARGET: ${{ matrix.target }}
         run: |
           version="$(sed -n 's/^version = "\([^"]*\)"/\1/p' Cargo.toml | head -n 1)"
-          artifact="claudex-v${version}-aarch64-apple-darwin"
-          cargo build --locked --release --target aarch64-apple-darwin
+          artifact="claudex-v${version}-${TARGET}"
+          cargo build --locked --release --target "${TARGET}"
           mkdir -p "dist/${artifact}"
-          cp "target/aarch64-apple-darwin/release/claudex" "dist/${artifact}/claudex"
+          cp "target/${TARGET}/release/claudex" "dist/${artifact}/claudex"
           cp README.md LICENSE SECURITY.md "dist/${artifact}/"
           tar -C dist -cJf "dist/${artifact}.tar.xz" "${artifact}"
-          (cd dist && shasum -a 256 "${artifact}.tar.xz" > "${artifact}.tar.xz.sha256")
+          if command -v sha256sum >/dev/null; then
+            (cd dist && sha256sum "${artifact}.tar.xz" > "${artifact}.tar.xz.sha256")
+          else
+            (cd dist && shasum -a 256 "${artifact}.tar.xz" > "${artifact}.tar.xz.sha256")
+          fi
       - uses: actions/upload-artifact@v7
         with:
-          name: claudex-release-assets
+          name: claudex-release-assets-${{ matrix.target }}
           path: |
             dist/*.tar.xz
             dist/*.tar.xz.sha256
@@ -51,8 +79,9 @@ jobs:
     steps:
       - uses: actions/download-artifact@v8
         with:
-          name: claudex-release-assets
+          pattern: claudex-release-assets-*
           path: dist
+          merge-multiple: true
       - name: Attest release archive
         uses: actions/attest-build-provenance@v4
         with:
@@ -60,9 +89,13 @@ jobs:
       - name: Verify release attestation
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh attestation verify dist/*.tar.xz --repo "$GITHUB_REPOSITORY"
+        run: |
+          for archive in dist/*.tar.xz; do
+            gh attestation verify "$archive" --repo "$GITHUB_REPOSITORY"
+          done
       - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/')
+        if: startsWith(github.ref, 'refs/tags/') || inputs.tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${GITHUB_REF_NAME}" dist/*.tar.xz dist/*.tar.xz.sha256 --verify-tag --generate-notes
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: gh release create "$RELEASE_TAG" dist/*.tar.xz dist/*.tar.xz.sha256 --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
