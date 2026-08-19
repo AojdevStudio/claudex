@@ -16,6 +16,7 @@ pub enum Action {
     Launch {
         alias: Option<String>,
         proxy_model: Option<String>,
+        context_window: Option<u32>,
         claude_args: Vec<OsString>,
     },
 }
@@ -92,6 +93,7 @@ impl Invocation {
 fn parse_launch(args: Vec<OsString>) -> Result<Invocation, ClaudexError> {
     let mut alias = None;
     let mut proxy_model = None;
+    let mut context_window = None;
     let mut claude_args = Vec::new();
     let mut index = 0;
 
@@ -103,39 +105,42 @@ fn parse_launch(args: Vec<OsString>) -> Result<Invocation, ClaudexError> {
 
         if args[index] == "--model" {
             let value = required_value(&args, index, "--model")?;
-            if alias.replace(value).is_some() {
-                return Err(ClaudexError::Arguments(
-                    "--model may be specified only once".into(),
-                ));
-            }
+            set_once(&mut alias, value, "--model")?;
             index += 2;
             continue;
         }
         if let Some(value) = selector_value(&args[index], "--model=")? {
-            if alias.replace(value).is_some() {
-                return Err(ClaudexError::Arguments(
-                    "--model may be specified only once".into(),
-                ));
-            }
+            set_once(&mut alias, value, "--model")?;
             index += 1;
             continue;
         }
         if args[index] == "--proxy-model" {
             let value = required_value(&args, index, "--proxy-model")?;
-            if proxy_model.replace(value).is_some() {
-                return Err(ClaudexError::Arguments(
-                    "--proxy-model may be specified only once".into(),
-                ));
-            }
+            set_once(&mut proxy_model, value, "--proxy-model")?;
             index += 2;
             continue;
         }
         if let Some(value) = selector_value(&args[index], "--proxy-model=")? {
-            if proxy_model.replace(value).is_some() {
-                return Err(ClaudexError::Arguments(
-                    "--proxy-model may be specified only once".into(),
-                ));
-            }
+            set_once(&mut proxy_model, value, "--proxy-model")?;
+            index += 1;
+            continue;
+        }
+        if args[index] == "--context-window" {
+            let value = required_value(&args, index, "--context-window")?;
+            set_once(
+                &mut context_window,
+                parse_context_window(&value)?,
+                "--context-window",
+            )?;
+            index += 2;
+            continue;
+        }
+        if let Some(value) = selector_value(&args[index], "--context-window=")? {
+            set_once(
+                &mut context_window,
+                parse_context_window(&value)?,
+                "--context-window",
+            )?;
             index += 1;
             continue;
         }
@@ -154,9 +159,39 @@ fn parse_launch(args: Vec<OsString>) -> Result<Invocation, ClaudexError> {
         action: Action::Launch {
             alias,
             proxy_model,
+            context_window,
             claude_args,
         },
     })
+}
+
+fn set_once<T>(slot: &mut Option<T>, value: T, flag: &str) -> Result<(), ClaudexError> {
+    if slot.replace(value).is_some() {
+        return Err(ClaudexError::Arguments(format!(
+            "{flag} may be specified only once"
+        )));
+    }
+    Ok(())
+}
+
+fn parse_context_window(value: &str) -> Result<u32, ClaudexError> {
+    let (digits, multiplier) = match value.as_bytes().last().copied() {
+        Some(b'k' | b'K') => (&value[..value.len() - 1], 1_000),
+        Some(b'm' | b'M') => (&value[..value.len() - 1], 1_000_000),
+        _ => (value, 1),
+    };
+    let tokens = digits
+        .parse::<u32>()
+        .ok()
+        .and_then(|tokens| tokens.checked_mul(multiplier))
+        .filter(|tokens| *tokens > 0)
+        .ok_or_else(|| {
+            ClaudexError::Arguments(
+                "--context-window must be a positive token count such as 500k, 1m, or 1050000"
+                    .into(),
+            )
+        })?;
+    Ok(tokens)
 }
 
 fn selector_value(value: &OsString, prefix: &str) -> Result<Option<String>, ClaudexError> {
@@ -208,6 +243,12 @@ pub fn command() -> Command {
                 .long("proxy-model")
                 .value_name("ID")
                 .help("Select an explicit raw proxy model ID"),
+        )
+        .arg(
+            Arg::new("context-window")
+                .long("context-window")
+                .value_name("TOKENS")
+                .help("Override the selected model's context window for this launch"),
         )
         .subcommand(Command::new("models").about("List configured model aliases"))
         .subcommand(

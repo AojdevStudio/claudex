@@ -57,6 +57,20 @@ fn model_accepts_aliases_and_passes_one_resolved_model() {
 }
 
 #[test]
+fn configured_context_window_is_injected_for_selected_alias() {
+    let fixture = Fixture::new();
+
+    fixture
+        .command()
+        .args(["--model", "opus"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "CLAUDE_CODE_MAX_CONTEXT_TOKENS=1050000",
+        ));
+}
+
+#[test]
 fn proxy_model_is_the_only_raw_model_path() {
     let fixture = Fixture::new();
 
@@ -67,6 +81,92 @@ fn proxy_model_is_the_only_raw_model_path() {
         .success()
         .stdout(predicate::str::contains(
             "argv[1]=--model\nargv[2]=provider/raw(high)\nargv[3]=-p\nargv[4]=hello",
+        ));
+}
+
+#[test]
+fn context_window_override_allows_an_unmapped_raw_model() {
+    let fixture = Fixture::new();
+
+    fixture
+        .command()
+        .args([
+            "--proxy-model",
+            "provider-new",
+            "--context-window",
+            "500k",
+            "-p",
+            "hello",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "argv[1]=--model\nargv[2]=provider-new\nargv[3]=-p\nargv[4]=hello",
+        ))
+        .stdout(predicate::str::contains(
+            "CLAUDE_CODE_MAX_CONTEXT_TOKENS=500000",
+        ))
+        .stdout(predicate::str::contains("--context-window").not());
+}
+
+#[test]
+fn unmapped_raw_model_requires_an_explicit_context_window() {
+    let fixture = Fixture::new();
+
+    fixture
+        .command()
+        .args(["--proxy-model", "provider-unmapped"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "model 'provider-unmapped' has no configured context window",
+        ))
+        .stderr(predicate::str::contains(
+            "context_windows.\"provider-unmapped\"",
+        ));
+}
+
+#[test]
+fn context_window_accepts_equals_form() {
+    let fixture = Fixture::new();
+
+    fixture
+        .command()
+        .args(["--proxy-model=provider-new", "--context-window=1M"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains(
+            "CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000",
+        ));
+}
+
+#[test]
+fn context_window_rejects_invalid_values() {
+    let fixture = Fixture::new();
+
+    for value in ["0", "500x", "4295m"] {
+        fixture
+            .command()
+            .args(["--context-window", value])
+            .assert()
+            .code(2)
+            .stderr(predicate::str::contains(
+                "--context-window must be a positive token count",
+            ));
+    }
+}
+
+#[test]
+fn context_window_may_only_be_specified_once() {
+    let fixture = Fixture::new();
+
+    fixture
+        .command()
+        .args(["--context-window", "500k", "--context-window=1m"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "--context-window may be specified only once",
         ));
 }
 
@@ -168,7 +268,15 @@ fn models_and_config_validate_are_pipeable_commands() {
         .assert()
         .success()
         .stdout(predicate::str::contains("fable\tprovider-fable\tdefault"))
-        .stdout(predicate::str::contains("haiku\tprovider-haiku"));
+        .stdout(predicate::str::contains(
+            "fable\tprovider-fable\tdefault\tcontext=1000000",
+        ))
+        .stdout(predicate::str::contains(
+            "haiku\tprovider-haiku\tcontext=200000",
+        ))
+        .stdout(predicate::str::contains(
+            "custom\tprovider-custom\tpicker\tcontext=500000",
+        ));
     fixture
         .command()
         .args(["config", "validate"])
@@ -278,6 +386,9 @@ fn exact_child_environment_comes_from_configuration() {
         ))
         .stdout(predicate::str::contains(
             "CLAUDE_CODE_MAX_TOOL_USE_CONCURRENCY=3",
+        ))
+        .stdout(predicate::str::contains(
+            "CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000",
         ))
         .stdout(predicate::str::contains("ENABLE_TOOL_SEARCH=false"));
 }

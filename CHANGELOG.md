@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- Configure, validate, display, and override model-specific Claude Code context windows.
+
 ## [0.2.1] - 2026-08-12
 
 ### Fixed

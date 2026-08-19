@@ -11,6 +11,15 @@ opus = "provider-opus-model"
 sonnet = "provider-sonnet-model"
 haiku = "provider-haiku-model"
 
+# Exact token limits keyed by the raw model IDs above. Claudex exports the
+# selected value as CLAUDE_CODE_MAX_CONTEXT_TOKENS for every launch.
+[context_windows]
+"provider-fable-model" = 1000000
+"provider-opus-model" = 1000000
+"provider-sonnet-model" = 200000
+"provider-haiku-model" = 200000
+"provider-custom-model" = 500000
+
 [custom_model]
 id = "provider-custom-model"
 name = "Custom gateway model"

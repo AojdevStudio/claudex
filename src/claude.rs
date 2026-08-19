@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use crate::config::Config;
 use crate::error::ClaudexError;
+use crate::models::ResolvedModel;
 use crate::secrets::Secret;
 
 const REMOVED_ENVIRONMENT: &[&str] = &[
@@ -28,7 +29,11 @@ const REMOVED_ENVIRONMENT: &[&str] = &[
     "ANTHROPIC_CUSTOM_MODEL_OPTION_DESCRIPTION",
 ];
 
-pub fn launch(config: &Config, model: &str, args: &[OsString]) -> Result<(), ClaudexError> {
+pub fn launch(
+    config: &Config,
+    model: &ResolvedModel,
+    args: &[OsString],
+) -> Result<(), ClaudexError> {
     let secret = config.load_secret()?;
     let executable = resolve(config)?;
     let mut command = build_command(config, &secret, &executable, model, args);
@@ -38,7 +43,7 @@ pub fn launch(config: &Config, model: &str, args: &[OsString]) -> Result<(), Cla
 
 pub fn run_live(
     config: &Config,
-    model: &str,
+    model: &ResolvedModel,
     args: &[OsString],
     timeout: Duration,
 ) -> Result<std::process::Output, ClaudexError> {
@@ -135,12 +140,12 @@ fn build_command(
     config: &Config,
     secret: &Secret,
     executable: &Path,
-    model: &str,
+    model: &ResolvedModel,
     args: &[OsString],
 ) -> Command {
     let mut command = Command::new(executable);
     command.arg0("claude");
-    command.arg("--model").arg(model).args(args);
+    command.arg("--model").arg(&model.id).args(args);
     for name in REMOVED_ENVIRONMENT {
         command.env_remove(name);
     }
@@ -151,6 +156,10 @@ fn build_command(
         .env("ANTHROPIC_DEFAULT_OPUS_MODEL", &config.models.opus)
         .env("ANTHROPIC_DEFAULT_SONNET_MODEL", &config.models.sonnet)
         .env("ANTHROPIC_DEFAULT_HAIKU_MODEL", &config.models.haiku)
+        .env(
+            "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
+            model.context_window.to_string(),
+        )
         .env("CLAUDE_CODE_SUBAGENT_MODEL", &config.claude.subagent_model)
         .env(
             "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT",
