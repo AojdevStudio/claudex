@@ -36,7 +36,7 @@ jobs:
           targets: ${{ matrix.target }}
       - name: Install Linux build tools
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes musl-tools xz-utils
+        run: .github/scripts/install-linux-build-tools.sh musl-tools xz-utils
       - name: Verify tag matches Cargo version
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
