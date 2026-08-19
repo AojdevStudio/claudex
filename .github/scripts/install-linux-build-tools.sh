@@ -13,18 +13,28 @@ apt_options=(
   -o DPkg::Lock::Timeout=60
 )
 
-for attempt in 1 2 3; do
+install_packages() {
+  sudo env DEBIAN_FRONTEND=noninteractive timeout --kill-after=10s 120s \
+    apt-get "${apt_options[@]}" install --yes "$@"
+}
+
+# GitHub-hosted runners already carry a current package index. Prefer it so a
+# transient Ubuntu mirror failure cannot block an otherwise reproducible build.
+if install_packages "$@"; then
+  exit 0
+fi
+
+for attempt in 1 2; do
   if sudo timeout --kill-after=10s 120s apt-get "${apt_options[@]}" update &&
-    sudo env DEBIAN_FRONTEND=noninteractive timeout --kill-after=10s 120s \
-      apt-get "${apt_options[@]}" install --yes "$@"; then
+    install_packages "$@"; then
     exit 0
   fi
 
-  if (( attempt < 3 )); then
-    echo "APT setup attempt ${attempt} failed; retrying in 10 seconds" >&2
+  if (( attempt < 2 )); then
+    echo "APT refresh attempt ${attempt} failed; retrying in 10 seconds" >&2
     sleep 10
   fi
 done
 
-echo "APT setup failed after 3 bounded attempts" >&2
+echo "APT setup failed after the cached index and 2 bounded refresh attempts" >&2
 exit 1

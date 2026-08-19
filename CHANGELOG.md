@@ -8,6 +8,10 @@ All notable changes to this project will be documented in this file.
 
 - configure model context windows
 
+### Changed
+
+- bound Linux package installation
+
 ## [0.2.1] - 2026-08-12
 
 ### Fixed
