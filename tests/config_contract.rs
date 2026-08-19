@@ -169,6 +169,40 @@ fn invalid_default_alias_and_unsupported_url_scheme_are_rejected() {
 }
 
 #[test]
+fn every_configured_model_requires_a_positive_context_window() {
+    let fixture = Fixture::new();
+    let original = fs::read_to_string(&fixture.config).expect("read config");
+
+    fs::write(
+        &fixture.config,
+        original.replace("\"provider-opus\" = 1050000\n", ""),
+    )
+    .expect("remove Opus context window");
+    fixture
+        .command()
+        .args(["config", "validate"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "models.opus selects 'provider-opus', but context_windows has no entry",
+        ));
+
+    fs::write(
+        &fixture.config,
+        original.replace("\"provider-opus\" = 1050000", "\"provider-opus\" = 0"),
+    )
+    .expect("zero Opus context window");
+    fixture
+        .command()
+        .args(["config", "validate"])
+        .assert()
+        .code(2)
+        .stderr(predicate::str::contains(
+            "context_windows.provider-opus must be greater than 0",
+        ));
+}
+
+#[test]
 fn non_utf8_and_owner_unreadable_keys_are_rejected() {
     let fixture = Fixture::new();
     let key = fixture.key_path();

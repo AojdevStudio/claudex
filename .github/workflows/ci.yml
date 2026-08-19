@@ -33,7 +33,7 @@ jobs:
           targets: ${{ matrix.target }}
       - name: Install Linux build tools
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install --yes musl-tools
+        run: .github/scripts/install-linux-build-tools.sh musl-tools
       - if: runner.os == 'macOS'
         run: cargo fmt --check
       - run: cargo clippy --all-targets --all-features --target "${{ matrix.target }}" -- -D warnings

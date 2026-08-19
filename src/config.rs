@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -13,6 +14,8 @@ pub struct Config {
     pub proxy: ProxyConfig,
     pub defaults: DefaultsConfig,
     pub models: ModelMap,
+    #[serde(default)]
+    pub context_windows: BTreeMap<String, u32>,
     #[serde(default)]
     pub custom_model: Option<CustomModel>,
     #[serde(default)]
@@ -165,6 +168,15 @@ impl Config {
                     "models.{name} cannot be empty"
                 )));
             }
+            self.validate_context_window(value, &format!("models.{name}"))?;
+        }
+        if let Some(custom) = &self.custom_model {
+            if custom.id.trim().is_empty() {
+                return Err(ClaudexError::Config(
+                    "custom_model.id cannot be empty".into(),
+                ));
+            }
+            self.validate_context_window(&custom.id, "custom_model.id")?;
         }
         if self.models.get(&self.defaults.model).is_none() {
             return Err(ClaudexError::Config(
@@ -172,6 +184,33 @@ impl Config {
             ));
         }
         Ok(())
+    }
+
+    fn validate_context_window(&self, model: &str, source: &str) -> Result<(), ClaudexError> {
+        match self.context_windows.get(model) {
+            Some(0) => Err(ClaudexError::Config(format!(
+                "context_windows.{model} must be greater than 0"
+            ))),
+            Some(_) => Ok(()),
+            None => Err(ClaudexError::Config(format!(
+                "{source} selects '{model}', but context_windows has no entry for that model"
+            ))),
+        }
+    }
+
+    pub fn context_window_for(
+        &self,
+        model: &str,
+        override_tokens: Option<u32>,
+    ) -> Result<u32, ClaudexError> {
+        if let Some(tokens) = override_tokens {
+            return Ok(tokens);
+        }
+        self.context_windows.get(model).copied().ok_or_else(|| {
+            ClaudexError::Arguments(format!(
+                "model '{model}' has no configured context window; add context_windows.\"{model}\" to the config"
+            ))
+        })
     }
 
     pub fn load_secret(&self) -> Result<Secret, ClaudexError> {

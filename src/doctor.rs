@@ -43,7 +43,7 @@ pub fn run(config: &Config, live: bool) -> Result<(), ClaudexError> {
     println!("PASS proxy-models");
 
     if live {
-        let model = models::resolve(config, None, None)?;
+        let model = models::resolve(config, None, None, None)?;
         let output = claude::run_live(
             config,
             &model,

@@ -23,7 +23,19 @@ cp config.example.toml ~/.config/claudex/config.toml
 chmod 600 ~/.config/claudex/config.toml
 ```
 
-Edit the endpoint and alias mappings for the machine. Keep the API key outside the TOML file:
+Edit the endpoint, alias mappings, and exact context windows for the machine. Every model referenced by `[models]` or `[custom_model]` must have a positive token count in `[context_windows]`. Claudex exports the selected model's value as `CLAUDE_CODE_MAX_CONTEXT_TOKENS`, so Claude Code compacts against the gateway model's real limit instead of assuming 200k for an unknown model ID.
+
+```toml
+[models]
+fable = "provider-large"
+haiku = "provider-small"
+
+[context_windows]
+"provider-large" = 1000000
+"provider-small" = 200000
+```
+
+Keep the API key outside the TOML file:
 
 ```bash
 mkdir -p ~/.config/cliproxyapi
@@ -40,6 +52,7 @@ claudex
 claudex --model fable
 claudex --model opus --resume my-session
 claudex --proxy-model 'provider/raw-model(high)' -p 'Return exactly OK'
+claudex --proxy-model 'provider/new-model' --context-window 500k
 claudex -- --model value-that-must-reach-claude
 
 claudex models
@@ -50,11 +63,13 @@ claudex completions zsh
 claudex --version
 ```
 
-`--model` accepts only the four configured aliases: `fable`, `opus`, `sonnet`, and `haiku`. `--proxy-model` is the explicit raw gateway-model path. Every other argument retains its relative ordering when forwarded to Claude Code. Use `--` when a forwarded value looks like a claudex selector or command.
+`--model` accepts only the four configured aliases: `fable`, `opus`, `sonnet`, and `haiku`. `--proxy-model` is the explicit raw gateway-model path. Raw IDs use their `[context_windows]` entry; an unmapped raw ID fails before Claude Code starts. Use `--context-window` with a positive integer, `k`, or `m` suffix (for example, `500k`, `1m`, or `1050000`) to override the selected model for one launch. Every other argument retains its relative ordering when forwarded to Claude Code. Use `--` when a forwarded value looks like a claudex selector or command.
+
+`claudex models` prints the effective window for every alias and the optional custom picker entry. The context window is process-wide and fixed when Claudex starts Claude Code. If you switch to a model with a different limit from Claude Code's `/model` picker, start a new session with `claudex --proxy-model MODEL_ID` so the matching window is applied.
 
 Configuration precedence is:
 
-1. `--model` or `--proxy-model`
+1. `--model` or `--proxy-model`, plus an optional one-launch `--context-window`
 2. supported `CLAUDEX_*` environment overrides
 3. `~/.config/claudex/config.toml`
 4. non-sensitive application defaults

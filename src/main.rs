@@ -43,7 +43,7 @@ fn run() -> Result<(), ClaudexError> {
         }
         Action::Models => {
             let config = Config::load(Overrides::from_env()?)?;
-            models::print(&config);
+            models::print(&config)?;
         }
         Action::Validate => {
             let config = Config::load(Overrides::from_env()?)?;
@@ -58,10 +58,16 @@ fn run() -> Result<(), ClaudexError> {
         Action::Launch {
             alias,
             proxy_model,
+            context_window,
             claude_args,
         } => {
             let config = Config::load(Overrides::from_env()?)?;
-            let model = models::resolve(&config, alias.as_deref(), proxy_model.as_deref())?;
+            let model = models::resolve(
+                &config,
+                alias.as_deref(),
+                proxy_model.as_deref(),
+                context_window,
+            )?;
             claude::launch(&config, &model, &claude_args)?;
         }
     }
